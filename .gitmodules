@@ -1,0 +1,3 @@
+[submodule "ddk"]
+	path = ddk
+	url = https://github.com/Ylarod/ddk.git

@@ -1,0 +1,7 @@
+id=MaskMyScene
+name=Mask My Scene
+version=${version}
+versionCode=${versionCode}
+author=${author}
+description=隐藏 Scene 守护进程端口，屏蔽检测工具。通过内核模块（LKM）拦截 connect/bind/proc 探测。
+updateJson=https://ghproxy.net/https://raw.githubusercontent.com/GirlandDragon/MaskMyScene/master/update.json

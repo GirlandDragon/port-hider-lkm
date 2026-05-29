@@ -1,0 +1,99 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    paths-ignore:
+      - "README.md"
+      - "CHANGELOG.md"
+  pull_request:
+    branches: ["master", "main"]
+    paths-ignore:
+      - "README.md"
+      - "CHANGELOG.md"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build for ${{ matrix.target }}
+        run: |
+          docker run --platform linux/amd64 --rm \
+            -v ${{ github.workspace }}:/build -w /build \
+            ghcr.io/ylarod/ddk:${{ matrix.target }} \
+            make -C lkm
+
+      - name: Rename artifact
+        run: mv lkm/port_hider.ko lkm/port_hider-${{ matrix.target }}.ko
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ko-${{ matrix.target }}
+          path: lkm/port_hider-${{ matrix.target }}.ko
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Substitute version from Iris
+        run: |
+          . Iris
+          sed -i "s/\${version}/$version/g; s/\${versionCode}/$versionCode/g; s/\${author}/$author/g" module/module.prop
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ko-*
+          path: kos
+          merge-multiple: true
+
+      - name: Collect kernel modules
+        run: |
+          mkdir -p dist/lkm dist/META-INF/com/google/android
+          cp module/* dist/ 2>/dev/null || true
+          cp -r META-INF/com/google/android/update-binary dist/META-INF/com/google/android/
+          cp -r META-INF/com/google/android/updater-script dist/META-INF/com/google/android/
+          find kos -name '*.ko' -exec cp {} dist/lkm/ \;
+
+      - name: Create Magisk module zip
+        run: |
+          cd dist && zip -r9 "../MaskMyScene-${GITHUB_SHA::7}.zip" . && cd ..
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MaskMyScene-${{ github.sha }}
+          path: MaskMyScene-*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: MaskMyScene-${{ github.sha }}
+          path: .
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: MaskMyScene-*.zip
+          generate_release_notes: true
